@@ -1,40 +1,31 @@
 let students = [];
 
 function processPdf() {
-  const link = document.getElementById("pdfLink").value.trim();
-  if (!link || !link.endsWith(".pdf")) {
-    alert("请输入有效的 arXiv PDF 链接");
+  const fileInput = document.getElementById("pdfFile");
+  const file = fileInput.files[0];
+
+  if (!file) {
+    alert("请选择一个 PDF 文件");
     return;
   }
 
-  // 使用 pdf.js 加载并解析 PDF
-  const loadingTask = pdfjsLib.getDocument(link);
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const pdfData = e.target.result;
 
-  loadingTask.promise.then(pdf => {
-    let textContent = "";
+    // 使用 pdf.js 加载 PDF
+    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
 
-    // 提取每一页的文本
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-      pdf.getPage(pageNum).then(page => {
-        const viewport = page.getViewport({ scale: 1.5 });
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+    loadingTask.promise.then(pdf => {
+      let textContent = "";
 
-        const renderContext = {
-          canvasContext: context,
-          viewport: viewport
-        };
-
-        page.render(renderContext).promise.then(() => {
-          // 使用 pdfjsLib.getTextContent() 提取文本
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        pdf.getPage(pageNum).then(page => {
           page.getTextContent().then(textContent => {
             textContent.items.forEach(item => {
               textContent += item.str + " ";
             });
 
-            // 提取作者信息
             const authors = extractAuthors(textContent);
             students = classifyAndExtractStudents(authors);
 
@@ -42,15 +33,17 @@ function processPdf() {
             enableDownloadLinks();
           });
         });
-      });
-    }
-  }).catch(err => {
-    console.error("PDF 加载失败:", err);
-    alert("无法加载 PDF 文件，请检查链接是否有效。");
-  });
+      }
+    }).catch(err => {
+      console.error("PDF 加载失败:", err);
+      alert("无法加载 PDF 文件，请检查文件是否有效。");
+    });
+  };
+
+  reader.readAsArrayBuffer(file);
 }
 
-// 提取作者信息（示例逻辑）
+// 提取作者信息
 function extractAuthors(text) {
   const lines = text.split("\n");
   const authors = [];
