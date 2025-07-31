@@ -8,8 +8,7 @@
 <body>
   <h1>arXiv PDF 作者Mapping工具</h1>
 
-  <label for="pdfLink">请输入 arXiv PDF 链接：</label><br />
-  <input type="text" id="pdfLink" placeholder="https://arxiv.org/pdf/2105.03486.pdf" />
+  <input type="file" id="pdfFile" accept=".pdf" />
   <button onclick="processPdf()">分析PDF</button>
 
   <div id="results"></div>
