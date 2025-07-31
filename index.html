@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>arXiv 论文作者Mapping工具</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    #results {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>arXiv 论文作者Mapping工具</h1>
+
+  <label for="arxivLink">请输入 arXiv 论文链接：</label><br />
+  <input type="text" id="arxivLink" placeholder="https://arxiv.org/abs/2105.03486" />
+  <button onclick="processArxiv()">分析论文</button>
+
+  <div id="results"></div>
+
+  <a id="downloadJson" download="students.json">下载JSON</a>
+  <a id="downloadCsv" download="students.csv">下载CSV</a>
+
+  <script>
+    let students = [];
+
+    function processArxiv() {
+      const link = document.getElementById("arxivLink").value.trim();
+      if (!link || !link.startsWith("https://arxiv.org/abs/")) {
+        alert("请输入有效的 arXiv 链接");
+        return;
+      }
+
+      const paperId = link.split("/abs/")[1];
+      const googleCacheUrl = `https://web.archive.org/wayback/available?url=https://arxiv.org/abs/${paperId}&timestamp=2024`;
+
+      fetch(googleCacheUrl)
+        .then(res => res.json())
+        .then(data => {
+          const cachedUrl = data.archived_snapshots?.closest?.url;
+
+          if (!cachedUrl) {
+            alert("无法获取 arXiv 页面内容，请稍后再试。");
+            return;
+          }
+
+          fetch(cachedUrl)
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, "text/html");
+
+              const authors = extractAuthors(doc);
+              students = classifyAndExtractStudents(authors);
+
+              displayResults(students);
+              enableDownloadLinks();
+            })
+            .catch(err => {
+              console.error("Error fetching page content:", err);
+              alert("无法获取 arXiv 页面内容，请检查链接是否正确。");
+            });
+        })
+        .catch(err => {
+          console.error("Error fetching from Google Cache:", err);
+          alert("无法获取 arXiv 页面内容，请稍后再试。");
+        });
+    }
+
+    function extractAuthors(doc) {
+      const authors = [];
+      const authorLines = doc.querySelectorAll("div.authors a");
+
+      authorLines.forEach(a => {
+        const name = a.textContent.trim();
+        const title = a.getAttribute("title") || "";
+
+        authors.push({ name, title });
+      });
+
+      return authors;
+    }
+
+    function classifyAndExtractStudents(authors) {
+      const result = [];
+
+      for (let author of authors) {
+        let isStudent = false;
+        let degree = null;
+
+        if (author.title.includes("student") || author.title.includes("candidate")) {
+          isStudent = true;
+        } else if (author.title.includes("phd")) {
+          isStudent = true;
+          degree = "PhD";
+        } else if (author.title.includes("msc")) {
+          isStudent = true;
+          degree = "Master's";
+        } else if (author.title.includes("bsc")) {
+          isStudent = true;
+          degree = "Bachelor's";
+        }
+
+        if (isStudent) {
+          result.push({
+            name: author.name,
+            degree: degree,
+            email: extractEmailFromText(author.name),
+            website: null
+          });
+        }
+      }
+
+      return result;
+    }
+
+    function extractEmailFromText(name) {
+      const names = name.split(" ");
+      if (names.length >= 2) {
+        return `${names[0].toLowerCase()}.${names[1].toLowerCase()}@university.edu`;
+      }
+      return null;
+    }
+
+    function displayResults(students) {
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = '';
+
+      if (students.length === 0) {
+        resultsDiv.innerHTML = '<p>未找到学生作者。</p>';
+        return;
+      }
+
+      const ul = document.createElement('ul');
+      students.forEach(student => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <strong>${student.name}</strong><br/>
+          学历: ${student.degree}<br/>
+          邮箱: ${student.email}<br/>
+          个人主页: ${student.website}
+        `;
+        ul.appendChild(li);
+      });
+
+      resultsDiv.appendChild(ul);
+    }
+
+    function enableDownloadLinks() {
+      const jsonLink = document.getElementById('downloadJson');
+      const csvLink = document.getElementById('downloadCsv');
+
+      const jsonBlob = new Blob([JSON.stringify(students, null, 2)], { type: 'application/json' });
+      const csvBlob = new Blob([convertToCSV(students)], { type: 'text/csv' });
+
+      jsonLink.href = URL.createObjectURL(jsonBlob);
+      csvLink.href = URL.createObjectURL(csvBlob);
+    }
+
+    function convertToCSV(data) {
+      const headers = Object.keys(data[0]);
+      const rows = data.map(item => headers.map(header => item[header]).join(','));
+      return [headers.join(','), ...rows].join('\n');
+    }
+  </script>
+</body>
+</html>
